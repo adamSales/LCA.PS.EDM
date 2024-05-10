@@ -1,0 +1,557 @@
+---
+# title: "R Notebook"
+# output: html_notebook
+---
+
+### Clean the corrected data (duplicated student entries removed)
+2022/04/01)
+
+```{r}
+# rm(list=ls())
+
+### original data
+cta <- read.csv("/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/probDat.csv")
+
+stdID <- unique(cta$field_id)
+nstd <- length(stdID)
+
+### | Transform variables (depmix doesn't allow factors)
+# str(cta)
+probDat_raw <- probDat <- cta # probDat <- probDat_raw
+probDat$grade <- as.integer(as.factor(probDat$grade)) # str(probDat$grade); table(probDat$grade)
+probDat$race <- as.integer(as.factor(probDat$race)) # levels(dat$race)
+probDat$sex <- as.integer(as.factor(probDat$sex)) # levels(dat$sex)
+probDat$frl <- as.integer(probDat$frl) # levels(dat$frl)
+probDat$esl <- as.integer(probDat$esl) # levels(dat$esl)
+
+covinf <- list(
+  grade = c('1 (9)', '2 (higher)'),
+  race = c('1 (WhiteAsian)', '2 (BlackMulti)', '3 (HispAIAN)'),
+  sex  = c('1 (F)', '2 (M)'),
+  frl  = c('1 (no)', '2 (yes)'), # about 70% had free lunch
+  esl = c('1 (no)', '2 (yes)')
+)
+
+### compare before/after-transformation data
+# table(probDat_raw$grade); table(probDat$grade)
+# table(probDat_raw$race); table(probDat$race)
+# table(probDat_raw$sex); table(probDat$sex)
+# table(probDat_raw$frl); table(probDat$frl)
+# table(probDat_raw$esl); table(probDat$esl)
+
+### | Reformat data to make student-centered data
+data_prob <- vector(mode="list", nstd)
+for (i in 1:nstd){# i<-1
+  ridx <- which(probDat$field_id == stdID[i])
+  data_prob[[i]] <- probDat[ridx,] # %>% arrange(ts1)
+  # View(data_indv_prob[[i]])
+  rm(ridx)
+}
+
+# rm(cta, probDat, probDat_raw, i, nstd)
+
+save.image("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007C.RData")
+## "C" stands for corrected
+
+####################################################
+### | Identify students whose data were changed
+### Rerun HMM only for those students
+
+# rm(list=ls())
+load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007C.RData")
+
+getIDs=function(LIST) vapply(LIST,function(x) as.character(x$field_id[1]),'z')
+
+data_prob_new <- data_prob
+names(data_prob_new) <- getIDs(data_prob_new)
+nobs_prob_new <- as.numeric( lapply(data_prob_new, nrow) )
+data_es1_new <- data_es1
+names(data_es1_new) <- getIDs(data_es1_new)
+nobs_es1_new <- as.numeric( lapply(data_es1_new, nrow) )
+
+load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/Data_Old/CTA2007_OneUnit_SameDay.RData")
+data_prob_old <- data_prob
+names(data_prob_old) <- getIDs(data_prob_old)
+### put the old data in order, according to the new data:
+data_prob_old <- data_prob_old[names(data_prob_new)]
+nobs_prob_old <- as.numeric( lapply(data_prob_old, nrow) )
+
+nameunit <- do.call('c', lapply(lapply(data_prob_oneunit_sday, '[[', 'unit'), unique))
+# table(nameunit) # sum(table(nameunit))
+pidx <- which(nameunit=="es_01")
+data_es1_old <- data_prob_oneunit_sday[pidx]
+nobs_es1_old <- as.numeric( lapply(data_es1_old, nrow) )
+
+pidx <- which(nobs_prob_new != nobs_prob_old) # n = 164
+pidx <- which(nobs_es1_new != nobs_es1_old)   # n = 123
+
+### es1 Data used in the model fitting
+
+load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/Data_Old/CTA2007.RData")
+
+```
+
+### Descriptive information of the raw data
+
+```{r}
+
+```
+
+
+### Extract data from one unit on the same day
+2022/04/01)
+
+```{r}
+# rm(list=ls())
+load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007C.RData")
+# load("CTA2007.RData")
+# load("C:/Users/hk23454/Box Sync/[RE] SELS/Real Data/Cognitive Tutor/CTA2007.RData")
+# rm(data_agg3_sday, data_agg4_sday, data_agg5_sday)
+
+nstd <- length(data_prob)
+
+### | Students who received "es_01" (Not Used)
+
+nstd_es1 <- 2270
+data_es1 <- vector(mode="list", nstd_es1)
+
+l <- 0
+for (i in 1:nstd){# i <- 1
+
+  if ("es_01" %in% data_prob[[i]]$unit){
+    l <- l+1
+    datai <- subset(data_prob[[i]], unit=="es_01")
+
+    ## If the student worked on the unit over multiple days, use the day
+    ## when the student attempted the largest number of problems
+    if (length(unique(datai$date)) > 1){
+      nobsiday <- plyr::count(datai$date)
+      tday <- nobsiday$x[which(nobsiday$freq==max(nobsiday$freq))]
+      datai <- subset(datai, date==tday[1])
+    }
+    data_es1[[l]] <- datai # data_prob_oneunit_sday[[i]]
+  }
+}
+# rm(datai, nobsiday, tday, i, l, nstd, nstd_es1)
+
+# ### nobs
+# nobs_es1 <- as.numeric( lapply(data_es1, nrow) )
+# summary(nobs_es1)
+# pidx <- which(nobs_es1 <= 5)
+
+
+### | Students whose most worked unit is es01 (Used)
+
+data_maxunit <- vector(mode="list", nstd)
+for (i in 1:nstd){# i<-50
+
+  ## Identify the unit a student worked most
+  nobsiunit <- plyr::count(data_prob[[i]]$unit)
+  datai <- subset(data_prob[[i]], unit==nobsiunit$x[which(nobsiunit$freq==max(nobsiunit$freq))])
+
+  ## If the student worked on the unit over multiple days, use the day
+  ## when the student attempted the largest number of problems
+  if (length(unique(datai$date)) > 1){
+    nobsiday <- plyr::count(datai$date)
+    tday <- nobsiday$x[which(nobsiday$freq==max(nobsiday$freq))]
+    datai <- subset(datai, date==tday[1])
+  }
+  data_maxunit[[i]] <- datai
+}
+
+# nobs_maxunit <- as.numeric( lapply(data_maxunit, nrow) )
+# summary(nobs_maxunit)
+# pidx <- which(nobs_maxunit <= 5)
+
+## Selected units
+nameunit <- do.call('c', lapply(lapply(data_maxunit, '[[', 'unit'), unique))
+table(nameunit) # sum(table(nameunit))
+pidx <- which(nameunit=="es_01")
+data_maxes1 <- data_maxunit[pidx]
+
+data_es1 <- data_maxes1
+### Note. This is the data used in HMM (prob-level) & LTM (aggregated partitions below)
+
+# nobs_maxes1 <- as.numeric( lapply(data_maxes1, nrow) )
+# summary(nobs_maxes1)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 4.00   39.00   48.00   50.24   59.00  151.00
+
+#pidx2 <- which(nameunit=="cta1_01")
+#data_prob_cta101_sday <- data_prob_oneunit_sday[pidx2]
+
+rm(data_maxes1, data_maxunit, datai, nobsiday, nobsiunit, i, nameunit, nobs_es1, nobs_maxes1, nobs_maxunit,
+   nstd, stdID, tday, pidx)
+# save.image("CTA2007_OneUnit_SameDay.RData")
+save.image("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007C_ES1.RData")
+
+
+
+#######################################################
+### | Compare students between OneUnit_SameDay & ES1_SameDay
+
+# load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007_OneUnit_SameDay.RData")
+#
+# stdID_es1all <- stdID_es1main <- NULL
+# for (i in 1:length(data_prob_es1all)){
+#   stdID_es1all[i] <-  data_prob_es1all[[i]]$field_id[1]
+# }
+#
+# for (i in 1:length(data_prob_es1main_maxday)){
+#   stdID_es1main[i] <-  data_prob_es1main_maxday[[i]]$field_id[1]
+# }
+# stdIDdiff <- setdiff(stdID_es1all, stdID_es1main)
+#
+#
+# # ### student ID in the original data
+# # stdID_data_prob <- rep(NA, length(data_prob))
+# # for (i in 1:length(data_prob)){
+# #   stdID_data_prob[i] <- data_prob[[i]]$field_id[1]
+# # }
+#
+# l <- 1
+# stdIDdiff[l] %in% stdID_es1main
+# stdIDdiff[l] %in% stdID_es1all
+#
+# lidx <- which(stdID_data_prob==stdIDdiff[l])
+# datai <- data_prob[[lidx]]
+# # plyr::count( datai$unit )
+#
+#
+# ### days the student worked on es_01
+# ridx <- which(datai$unit=="es_01")
+# table(data.frame(y1=datai$date[ridx], y2=datai$unit[ridx]))
+#
+# ## what else did this student receive?
+# table( datai$unit[which(datai$date=="08/31/07 ")] )
+#
+# ### the date of maximal attempts
+# tmp <- plyr::count(datai$date)
+# ridx <- which( datai$date==tmp$x[tmp$freq==max(tmp$freq)] )
+# plyr::count( datai[ridx,"unit"] )
+#
+# nobs_stddiff <- rep(NA, length(stdIDdiff))
+# for (l in 1:length(stdIDdiff)){# l<-1
+#
+#   lidx <- which(stdID_data_prob==stdIDdiff[l])
+#   datai <- data_prob[[lidx]]
+#   ridx <- which(datai$unit=="es_01")
+#   nobs_stddiff[l] <- length(ridx)
+#
+#   ## what else did this student receive?
+#   table( datai$unit[which(datai$date=="08/31/07 ")] )
+#
+# }
+#
+# # View(data_prob[[lidx]])
+# #print( plyr::count(data_prob[[lidx]]$unit) )
+# # plyr::count(data_prob[[lidx]]$date)
+# datai <- data_prob[[lidx]]
+# udate <- unique(datai$date)
+# udate_unit <- vector(mode="list", length=length(udate))
+# for (l in 1:length(udate)){# l<-1
+#   # udate_unit[[l]] <- plyr::count( datai$unit[which(datai$date==udate[l])] )
+#   print(l)
+#   print(plyr::count( datai$unit[which(datai$date==udate[l])] ) )
+# }
+```
+
+### Parition Data for Mplus
+
+```{r}
+# rm(list=ls())
+load("C:/Users/hk23454/Box Sync/[RE] CTA Flow/Real Data/Cognitive Tutor/CTA2007C_ES1.RData")
+
+#### Partition the data ---------------------------
+cname <- c("nerrs1", "nhints1", "total_t1", "ltime")
+partDat <- function(dattmp, kran, tby){
+  # cc <- 0
+  # kran <- 3:4; tby <- tt2
+  dout <- matrix(NA, length(min(kran):max(kran)), ncol(dattmp),
+                 dimnames=list(NULL, names(dattmp)))
+  for (k in kran){# k<-1
+    # cc <- cc+1
+    dout[k,] <- as.matrix(dattmp[((k-1)*tby+1),])
+    if (k==max(kran)){
+      dout[k,cname] <- colMeans(as.matrix(dattmp[((k-1)*tby+1):nrow(dattmp),cname]), na.rm=T)
+      dout[k,'nprob'] <- nrow(dattmp) - (k-1)*tby
+    } else {
+      dout[k,cname] <- colMeans(as.matrix(dattmp[((k-1)*tby+1):(k*tby),cname]), na.rm=T)
+      dout[k,'nprob'] <- tby
+    }
+  } # View(dout)
+  dout[,'ltime'] <- log(as.numeric(dout[,'total_t1'])/ 1000) #
+  return(dout)
+}
+
+nstd <- length(data_es1)
+# nstd <- length(data_prob_es01_sday)
+# nstd <- length(data_prob_cta101_sday)
+
+for (nagg in 3:5){# nagg <- 3
+
+  data_agg_sday <- vector(mode="list", nstd)
+
+  for (i in 1:nstd){# i<-2;
+
+    dati <- data_es1[[i]]
+    # dati <- data_prob_es01_sday[[i]]
+    # dati <- data_prob_cta101_sday[[i]]
+
+    ## Recode covariate
+    if (dati$grade[1]==2){
+      # higher than 9
+      dati$grade.h <- 1
+    } else {
+      dati$grade.h <- 0
+    }
+
+    if (dati$race[1]==2){
+      ## race = black multi
+      dati$race.bl <- 1
+    } else {
+      dati$race.bl <- 0
+    }
+
+    if (dati$race[1]==3){
+      ## racie = hispanic native american
+      dati$race.hn <- 1
+    } else {
+      dati$race.hn <- 0
+    }
+
+    if (dati$sex[1]==2){# male
+      dati$sex.m <- 1
+    } else {
+      dati$sex.m <- 0
+    }
+
+    if (dati$frl[1]==2){# yes
+      dati$frl.y <- 1
+    } else {
+      dati$frl.y <- 0
+    }
+
+    if (dati$esl[1]==2){# yes
+      dati$esl.y <- 1
+    } else {
+      dati$esl.y <- 0
+    }
+
+    dataggi <- matrix(NA, nagg, ncol(dati), dimnames=list(NULL, names(dati)))
+
+    if (nrow(dati) >= nagg){
+      ## Divide the obss evenly
+      tt <- floor(nrow(dati) / nagg)
+      dataggi <- partDat(dattmp=dati, kran=1:nagg, tby=tt)
+      dataggi <- as.data.frame(dataggi)
+      dataggi <- dataggi[with(dataggi, order(dataggi$time)),]
+      data_agg_sday[[i]] <- dataggi
+    }
+    rm(dati, dataggi)
+  }
+
+  eval(parse(text=paste0("data_es1_part", nagg, " <- data_agg_sday")))
+  #eval(parse(text=paste0("data_cta101_part", nagg, " <- data_agg_sday")))
+  rm(tt, i, nagg, data_agg_sday)
+} # end of nagg
+
+
+
+### | Transform and export the data
+namecov <- c("grade.h", "race.bl", "race.hn", "sex.m", "frl.y",
+             "esl.y", "pretest", "posttest", "gainscore")
+
+nagg <- 4
+eval(parse(text=paste0("data_agg <- data_es1_part", nagg)))
+#eval(parse(text=paste0("data_agg <- data_cta101_part", nagg)))
+
+dout <- matrix(NA, nstd, 1 + length(namecov) + 4 * nagg)
+colnames(dout) <- c("ID", namecov,  paste0("ltime", 1:nagg),
+                    paste0("cerr", 1:nagg),
+                    paste0("chint", 1:nagg),
+                    paste0("lprob", 1:nagg))
+
+
+
+## student ID
+stdID <- do.call('c', lapply(lapply(data_prob, '[[', 'field_id'), unique))
+# stdID <- rep(NA, length(data_prob))
+# for (i in 1:length(data_prob)){
+#   stdID[i] <- data_prob[[i]]$field_id[1]
+# }
+
+# l <- 0
+#for (i in 1:nstd){# i<-1
+#  if (!is.null(data_agg[[i]])){
+for (i in 1:length(data_agg)) {# i<-1
+
+  # l <- l + 1
+  # dout[l,'ID']  <- stdID[i]
+  dout[i, 'ID'] <- stdID[i]
+
+  ### Discretize nhints, nerrs
+  # data_agg[[i]]$nhintc <- floor(as.numeric(data_agg[[i]]$nhints1))
+  # data_agg[[i]]$nerrc  <- floor(as.numeric(data_agg[[i]]$nerrs1))
+
+  data_agg[[i]]$nhintc <- cut(ceiling(as.numeric(data_agg[[i]]$nhints1)),
+                              # breaks=c(-1, 0, 1, 5, Inf),
+                              breaks=c(-1, 0, 1, Inf),
+                              #breaks=c(-1, 0, 1, 5, 10, 20, 30, Inf),
+                              labels=seq(0,2))
+  data_agg[[i]]$nerrc <- cut(ceiling(as.numeric(data_agg[[i]]$nerrs1)),
+                             # breaks=c(-1, 0, 1, 5, Inf),
+                             breaks=c(-1, 0, 1, Inf),
+                             #breaks=c(-1, 0, 1, 5, 10, 15, Inf),
+                             labels=seq(0,2))
+
+  datai <- as.matrix(data_agg[[i]])
+
+  dout[l, namecov] <- datai[1,namecov]
+  dout[l, paste0('ltime', 1:nagg)] <- datai[,'ltime']
+  dout[l, paste0('chint', 1:nagg)] <- datai[,'nhintc']
+  dout[l, paste0('cerr', 1:nagg)]  <- datai[,'nerrc']
+  dout[l, paste0('lprob', 1:nagg)] <- log(as.numeric(datai[,'nprob']))
+  #  }
+  #}
+}
+rm(datai, l, i)
+
+eval(parse(text=paste0("data_es1_mplus_part", nagg, " <- dout")))
+# eval(parse(text=paste0("data_cta101_mplus_part", nagg, " <- dout")))
+dout[is.na(dout)] <- 9999
+
+# wd <- "C:/Users/hk23454/Box Sync/[RE] SELS/Real Data/Cognitive Tutor/LTA/"
+# wd <- "C:/Users/annie/Box Sync/[RE] SELS/Real Data/Cognitive Tutor/LTA/"
+write.table(dout, paste0("cta_es1_part", nagg, ".csv"), sep=",",  row.names = F, col.names=F)
+write.table(colnames(dout), paste0("cta_es01_part", nagg, "_varname.dat"), col.names = F, row.names = F, quote=FALSE, sep=",")
+
+# write.table(dout, paste0("cta_cta101_part", nagg, ".csv"), sep=",",  row.names = F, col.names=F)
+# write.table(colnames(dout), paste0("cta_cta101_part", nagg, "_varname.dat"), col.names = F, row.names = F, quote=FALSE, sep=",")
+
+rm(dout, cname, nagg, namecov, nstd, partDat)
+
+
+
+data_prob
+
+load("C:/Users/hk23454/Box Sync/[RE] HMM/Real data/Cognitive Tutor/probLevelData.RData")
+ridx <- which(x$field_id==10340302004)
+x[ridx,]
+
+write.table(x[ridx,], "C:/Users/hk23454/Box Sync/[RE] HMM/Manuscript/BRM/probDatx.csv", sep=",", row.names = F, col.names=T)
+
+# load("CTA2007.RData")
+# load("C:/Users/hk23454/Box Sync/[RE] SELS/Real Data/Cognitive Tutor/CTA_OneUnit_SDay.RData")
+
+i <- 221
+# field ID: 10340302004
+## different grades and pre/post scores, but the same results for the date/time,
+## indicators?
+
+write.table(data_prob_es01_sday[[i]], "C:/Users/hk23454/Box Sync/[RE] HMM/Manuscript/BRM/probDatx_es1.csv", sep=",", row.names = F, col.names=T)
+
+# load("C:/Users/hk23454/Box Sync/[RE] SELS/Real Data/Cognitive Tutor/ctData.RData")
+ridx <- which(probDat$field_id==10340302004)
+
+write.table(probDat[ridx,], "C:/Users/hk23454/Box Sync/[RE] HMM/Manuscript/BRM/ctData_i.csv", sep=",", row.names = F, col.names=T)
+```
+
+### Measurement properties of es1
+
+```{r}
+load("CTA2007.RData")
+# View(data_prob[[i]])
+
+## Gather students who received es1
+pidx <- NULL
+for (i in 1:length(data_prob)){# i<-1
+  if ( any(data_prob[[i]]$unit == "es_01") ){
+    pidx <- c(pidx, i)
+  }
+}
+nexaminee <- length(pidx)
+
+## gather item names within es1
+pname <- sname <- spname <- NULL
+for (i in 1:nexaminee){#i<-pidx[1]
+
+  dati <- data_prob[[pidx[i]]]
+  ridx <- which(dati$unit=="es_01")
+
+  sname <- c(sname, dati$section[ridx])
+  pname <- c(pname, dati$problem[ridx])
+  spname <- c(spname, paste0(dati$section[ridx], "__", dati$problem[ridx]))
+
+  # sname <- c(sname, data_prob[[i]]$section[which(data_prob[[i]]$unit=="es_01")])
+  # pname <- c(pname, data_prob[[i]]$problem[which(data_prob[[i]]$unit=="es_01")])
+  # spname <- c(spname, paste0( data_prob[[i]]$section[which(data_prob[[i]]$unit=="es_01")], "__",
+  #                   data_prob[[i]]$problem[which(data_prob[[i]]$unit=="es_01")] ) )
+}
+
+length( unique(sname) )
+length( unique(pname) )
+cname <- sort(unique(spname))
+# cname <- c(cname, cname[6:13])
+# cname <- cname[-c(6:13)]
+# cname[c(1,2)] <- cname[c(2,1)]
+
+nitem <- length(cname)
+## there are only 110 questions in es01, how a student can work on 180 problems in es1?
+
+## make indicator matrix
+## indicators
+# names(data_prob[[pidx[1]]])
+# ind <- c("nerrs1", "nhints1", "total_t1", "ltime")
+ind_es1 <- list(nerr=matrix(NA, nexaminee, nitem, dimnames=list(NULL, cname)),
+                nhint=matrix(NA, nexaminee, nitem, dimnames=list(NULL, cname)),
+                ttime=matrix(NA, nexaminee, nitem, dimnames=list(NULL, cname)),
+                ltime=matrix(NA, nexaminee, nitem, dimnames=list(NULL, cname)))
+
+for (i in 1:nexaminee){# i<-1
+
+  dati <- data_prob[[pidx[i]]]
+  ridx <- which(dati$unit=="es_01")
+  cname_i <- paste0( dati$section[ridx], "__", dati$problem[ridx] )
+
+  # tmp <- rep(NA, length(cname_i))
+  # for (k in 1:length(cname_i)){# k<-3
+  #   tmp[k] <- cname_i[k] %in% cname
+  # }
+  # cname_i[tmp==F]
+
+  ind_es1$nerr [i,cname_i] <- dati$nerrs1[ridx]
+  ind_es1$nhint[i,cname_i] <- dati$nhints1[ridx]
+  ind_es1$ttime[i,cname_i] <- dati$total_t1[ridx]
+  ind_es1$ltime[i,cname_i] <- dati$ltime[ridx]
+}
+
+# hist(ind_es1$nerr)
+# table(ind_es1$nerr)
+barplot( colMeans(ind_es1$nerr,na.rm=T) )
+# hist(ind_es1$nhint)
+barplot( colMeans(ind_es1$nhint, na.rm=T) )
+barplot( colMeans(ind_es1$ltime, na.rm=T) )
+
+subplot <- par(mfrow=c(1,3))
+barplot( colMeans(ind_es1$nerr,na.rm=T) )
+barplot( colMeans(ind_es1$nhint, na.rm=T) )
+barplot( colMeans(ind_es1$ltime, na.rm=T) )
+par(subplot)
+
+tmp <- sort.int(colMeans(ind_es1$nerr,na.rm=T), decreasing=T, index.return=T)
+
+tmp <- sort.int(colMeans(ind_es1$nhint,na.rm=T), decreasing=T, index.return=T)
+
+# tmp$x[1:10]
+# tmp$ix[1:10]
+
+tmp_freq <- rep(NA, 20)
+for (k in 1:20){# k<-1
+  # tmp_freq[k] <- length( which(!is.na(ind_es1$nerr[,names(tmp$x[k])]) ))
+  tmp_freq[k] <- length( which(!is.na(ind_es1$nhint[,names(tmp$x[k])]) ))
+}
+tmp_tab <- rbind(tmp$x[1:20], tmp_freq[1:20]) # tmp$ix[1:20],
+rownames(tmp_tab) <- c("val", "freq")
+
+```
