@@ -1,6 +1,6 @@
 library(tidyverse)
 
-probPartDat <- read_csv('ASSISTments_ProblemLevelData_Adam.csv')%>%
+probPartDat <- read_csv('dataProcessed/ASSISTments_ProblemLevelData_Adam.csv')%>%
   mutate(
     prob=paste0(problem_id,problem_part),
     time=log(total_time),
