@@ -240,3 +240,36 @@ ggplot(plotEffDat,aes(pp,tau,ymin=tau-2*se,ymax=tau+2*se))+
 
 
 #### spline plot
+
+load('dataProcessed/ctData.RData')
+
+xirt=sort(dat$xirt)
+sp=splines::ns(xirt,3)
+
+spBeta=beta[,,startsWith(dimnames(beta)$parameters,'splines')]
+spBeta=apply(spBeta,3,as.vector)
+spPred=sp%*%t(spBeta)
+spSumm=apply(spPred,1,function(x) c(mean=mean(x),quantile(x,c(0.05,0.95))))
+spSumm=t(spSumm)
+
+spGamma=gammaShort[,startsWith(colnames(gammaShort),'splines')]
+spPredGamma=sp%*%t(spGamma)
+spSummGamma=t(apply(spPredGamma,1,function(x) c(mean=mean(x),quantile(x,c(0.05,0.95)))))
+
+
+splinePlotDat=as.data.frame(
+  rbind(
+    cbind(xirt=xirt,spSumm),
+    cbind(xirt=xirt,spSummGamma)
+))%>%
+  mutate(dep=factor(
+    rep(c('beta','gamma'),each=nrow(dat)),
+    levels=c('beta','gamma'),
+    labels=c(bquote(logit(1-pi)),bquote(Posttest))))
+
+
+  ggplot(splinePlotDat,aes(xirt,mean,ymin=`5%`,ymax=`95%`))+
+    geom_line(linewidth=2)+geom_ribbon(alpha=0.3)+
+    xlab("Pretest Score")+ylab("Contribution to Linear Predictor")+
+    facet_grid(.~dep,labeller = label_parsed)
+ggsave('results/splines.pdf',height=5,width=6)
